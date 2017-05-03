@@ -8,7 +8,7 @@ moveit_msgs/RobotState start_state
 string group_name
 
 # A sequence of waypoints to be followed by the group joints 
-trajectory_msgs/JointTrajectory[] waypoints
+trajectory_msgs/JointTrajectory waypoints
 
 ---
 
