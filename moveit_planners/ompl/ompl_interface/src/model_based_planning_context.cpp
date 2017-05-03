@@ -79,10 +79,12 @@ ompl_interface::ModelBasedPlanningContext::ModelBasedPlanningContext(const std::
   , use_state_validity_cache_(true)
   , simplify_solutions_(true)
 {
+
   complete_initial_robot_state_.update();
   ompl_simple_setup_->getStateSpace()->computeSignature(space_signature_);
   ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
       boost::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, _1));
+  std::cout << "It is initialized" << std::endl;
 }
 
 void ompl_interface::ModelBasedPlanningContext::setProjectionEvaluator(const std::string& peval)
@@ -150,6 +152,8 @@ ompl_interface::ModelBasedPlanningContext::getProjectionEvaluator(const std::str
 ompl::base::StateSamplerPtr
 ompl_interface::ModelBasedPlanningContext::allocPathConstrainedSampler(const ompl::base::StateSpace* ss) const
 {
+
+  std::cout << "It is entered allocPathConstrainedSampler" << std::endl;
   if (spec_.state_space_.get() != ss)
   {
     logError("%s: Attempted to allocate a state sampler for an unknown state space", name_.c_str());
@@ -205,6 +209,8 @@ void ompl_interface::ModelBasedPlanningContext::configure()
 
   if (path_constraints_ && spec_.constraints_library_)
   {
+
+      std::cout <<"HELLO it is entered to this" <<std::endl;
     const ConstraintApproximationPtr& ca =
         spec_.constraints_library_->getConstraintApproximation(path_constraints_msg_);
     if (ca)
@@ -212,6 +218,10 @@ void ompl_interface::ModelBasedPlanningContext::configure()
       getOMPLStateSpace()->setInterpolationFunction(ca->getInterpolationFunction());
       logInform("Using precomputed interpolation states");
     }
+  }
+  else{
+
+      std::cout <<"HELLO it is not entered to this" <<std::endl;
   }
 
   useConfig();
@@ -405,18 +415,24 @@ void ompl_interface::ModelBasedPlanningContext::clear()
 }
 
 bool ompl_interface::ModelBasedPlanningContext::setPathConstraints(const moveit_msgs::Constraints& path_constraints,
+                                                                   const moveit_msgs::TrajectoryConstraints& traj_constraints,
                                                                    moveit_msgs::MoveItErrorCodes* error)
 {
   // ******************* set the path constraints to use
   path_constraints_.reset(new kinematic_constraints::KinematicConstraintSet(getRobotModel()));
   path_constraints_->add(path_constraints, getPlanningScene()->getTransforms());
+  for(auto constraint : traj_constraints.constraints) {
+      //path_constraints_->add(constraint, getPlanningScene()->getTransforms());
+  }
   path_constraints_msg_ = path_constraints;
 
   return true;
 }
 
 bool ompl_interface::ModelBasedPlanningContext::setGoalConstraints(
-    const std::vector<moveit_msgs::Constraints>& goal_constraints, const moveit_msgs::Constraints& path_constraints,
+    const std::vector<moveit_msgs::Constraints>& goal_constraints, 
+    const moveit_msgs::Constraints& path_constraints,
+    const moveit_msgs::TrajectoryConstraints& traj_constraints,
     moveit_msgs::MoveItErrorCodes* error)
 {
   // ******************* check if the input is correct
@@ -424,6 +440,9 @@ bool ompl_interface::ModelBasedPlanningContext::setGoalConstraints(
   for (std::size_t i = 0; i < goal_constraints.size(); ++i)
   {
     moveit_msgs::Constraints constr = kinematic_constraints::mergeConstraints(goal_constraints[i], path_constraints);
+    for(auto constraint : traj_constraints.constraints) {
+        //constr = kinematic_constraints::mergeConstraints(constr, constraint);
+    }
     kinematic_constraints::KinematicConstraintSetPtr kset(
         new kinematic_constraints::KinematicConstraintSet(getRobotModel()));
     kset->add(constr, getPlanningScene()->getTransforms());
@@ -591,7 +610,8 @@ bool ompl_interface::ModelBasedPlanningContext::solve(double timeout, unsigned i
   bool result = false;
   if (count <= 1)
   {
-    logDebug("%s: Solving the planning problem once...", name_.c_str());
+    logInform("%s: Solving the planning problem once...", name_.c_str());
+    //logDebug("%s: Solving the planning problem once...", name_.c_str());
     ob::PlannerTerminationCondition ptc =
         ob::timedPlannerTerminationCondition(timeout - ompl::time::seconds(ompl::time::now() - start));
     registerTerminationCondition(ptc);
@@ -601,7 +621,8 @@ bool ompl_interface::ModelBasedPlanningContext::solve(double timeout, unsigned i
   }
   else
   {
-    logDebug("%s: Solving the planning problem %u times...", name_.c_str(), count);
+    logInform("%s: Solving the planning problem %u times...", name_.c_str(), count);
+    //logDebug("%s: Solving the planning problem %u times...", name_.c_str(), count);
     ompl_parallel_plan_.clearHybridizationPaths();
     if (count <= max_planning_threads_)
     {

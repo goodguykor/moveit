@@ -14,9 +14,23 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib
   roscpp
   pluginlib
+  trajectory_msgs
   std_srvs
   tf
 )
+
+
+add_service_files(
+  FILES
+  GetJointPath.srv
+)
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+  trajectory_msgs
+  moveit_msgs
+)
+
 
 catkin_package(
   LIBRARIES
@@ -34,6 +48,7 @@ include_directories(${catkin_INCLUDE_DIRS}
 
 link_directories(${Boost_LIBRARY_DIRS})
 link_directories(${catkin_LIBRARY_DIRS})
+
 
 add_library(moveit_move_group_capabilities_base
   src/move_group_context.cpp
@@ -55,6 +70,7 @@ add_library(moveit_move_group_default_capabilities
   src/default_capabilities/kinematics_service_capability.cpp
   src/default_capabilities/state_validation_service_capability.cpp
   src/default_capabilities/cartesian_path_service_capability.cpp
+  src/default_capabilities/joint_path_service_capability.cpp
   src/default_capabilities/get_planning_scene_service_capability.cpp
   src/default_capabilities/apply_planning_scene_service_capability.cpp
   src/default_capabilities/clear_octomap_service_capability.cpp

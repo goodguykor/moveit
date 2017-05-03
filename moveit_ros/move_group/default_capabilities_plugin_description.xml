@@ -6,6 +6,12 @@
     </description>
   </class>
 
+  <class name="move_group/MoveGroupJointPathService" type="move_group::MoveGroupJointPathService" base_class_type="move_group::MoveGroupCapability">
+    <description>
+      Computing straight line Joint paths with collision checking via a ROS service
+    </description>
+  </class>
+
   <class name="move_group/MoveGroupExecuteService" type="move_group::MoveGroupExecuteService" base_class_type="move_group::MoveGroupCapability">
     <description>
       Allow execution of previously computed paths via a ROS service

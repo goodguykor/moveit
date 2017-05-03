@@ -422,10 +422,10 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     context->setCompleteInitialState(*start_state);
 
     context->setPlanningVolume(req.workspace_parameters);
-    if (!context->setPathConstraints(req.path_constraints, &error_code))
+    if (!context->setPathConstraints(req.path_constraints, req.trajectory_constraints, &error_code))
       return ModelBasedPlanningContextPtr();
 
-    if (!context->setGoalConstraints(req.goal_constraints, req.path_constraints, &error_code))
+    if (!context->setGoalConstraints(req.goal_constraints, req.path_constraints, req.trajectory_constraints,  &error_code))
       return ModelBasedPlanningContextPtr();
 
     try

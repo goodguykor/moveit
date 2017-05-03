@@ -1,0 +1,22 @@
+# Define the frame for the specified waypoints
+std_msgs/Header header
+
+# The start at which to start the Cartesian path
+moveit_msgs/RobotState start_state
+
+# Mandatory name of group to compute the path for
+string group_name
+
+# A sequence of waypoints to be followed by the group joints 
+trajectory_msgs/JointTrajectory[] waypoints
+
+---
+
+# The state at which the computed path starts
+moveit_msgs/RobotState start_state
+
+# The computed solution trajectory, for the desired group, in configuration space
+moveit_msgs/RobotTrajectory solution
+
+# The error code of the computation
+moveit_msgs/MoveItErrorCodes error_code

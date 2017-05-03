@@ -44,6 +44,7 @@ namespace move_group
 // These capabilities are loaded unless listed in disable_capabilities
 // clang-format off
 static const char* DEFAULT_CAPABILITIES[] = {
+   "move_group/MoveGroupJointPathService",
    "move_group/MoveGroupCartesianPathService",
    "move_group/MoveGroupKinematicsService",
    "move_group/MoveGroupExecuteTrajectoryAction",
@@ -74,6 +75,8 @@ static const std::string IK_SERVICE_NAME = "compute_ik";  // name of ik service
 static const std::string FK_SERVICE_NAME = "compute_fk";  // name of fk service
 static const std::string STATE_VALIDITY_SERVICE_NAME =
     "check_state_validity";  // name of the service that validates states
+static const std::string JOINT_PATH_SERVICE_NAME =
+    "compute_joint_path";  // name of the service that computes cartesian paths
 static const std::string CARTESIAN_PATH_SERVICE_NAME =
     "compute_cartesian_path";  // name of the service that computes cartesian paths
 static const std::string GET_PLANNING_SCENE_SERVICE_NAME =
