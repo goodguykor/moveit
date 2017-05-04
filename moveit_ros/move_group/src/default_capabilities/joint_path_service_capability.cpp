@@ -84,24 +84,162 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
         std::vector<robot_state::RobotStatePtr> traj;
 
         robot_state::robotStateToRobotStateMsg(start_state, res.start_state);
+        std::string target_group = req.group_name;
 
 
 
+        const robot_model::RobotModelPtr& kmodel = context_->planning_scene_monitor_->getRobotModelLoader()->getModel();
+        const std::vector<robot_model::JointModel*>& jms = kmodel->getJointModels();
+        for(robot_model::JointModel* jm : jms) {
+            const std::vector<std::string>& jm_variable_names = jm->getVariableNames(); 
+            for(auto jm_var : jm_variable_names) {
+                auto jm_var_bound = jm->getVariableBounds(jm_var);
+                //jm_var_bound.position_bounded_ = false;
+                //jm_var_bound.min_position_ = -3.14;
+                //jm_var_bound.max_position_ = 3.14;
+                //jm->setVariableBounds(jm_var, jm_var_bound);
+            }
+        }
+
+
+        robot_state::RobotState query_robot_state = start_state;
+        const robot_model::JointModelGroup* joint_model_group = query_robot_state.getJointModelGroup(target_group);
+
+        planning_scene_monitor::LockedPlanningSceneRO ps(context_->planning_scene_monitor_);
+
+        std::vector<double> query_joint_states;
+        query_robot_state.copyJointGroupPositions(joint_model_group, query_joint_states);
+
+        const std::vector<std::string>& query_joint_names = joint_model_group->getActiveJointModelNames();
+        const std::vector<std::string>& req_joint_names = req.waypoints.joint_names;
+
+        std::vector<robot_state::RobotState> nc_waypoints;
+        std::vector<robot_state::RobotState> nc_waypoints_time;
+        nc_waypoints.push_back(start_state);
 
 
 
+        for(std::size_t i = 0; i < req.waypoints.points.size(); ++i){
+            trajectory_msgs::JointTrajectoryPoint waypoint = req.waypoints.points[i];
+            for(std::size_t j = 0; j < query_joint_names.size(); ++j){
+                for(std::size_t k = 0; k < req_joint_names.size(); ++k){
+                    if(req_joint_names[k] == query_joint_names[j]){
+                        query_joint_states[j] = waypoint.positions[k];
+                        break;
+                    }
+                }
+            }
+            query_robot_state.setJointGroupPositions(joint_model_group, query_joint_states);
+            if(ps->isStateColliding(query_robot_state)) {
+                std::cout << "This state is colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
+                if(i ==  req.waypoints.points.size() - 1){
+                    std::cout << "!!!!!!!! this trajectory could not solved !!" << std::endl;
+                    res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GOAL_CONSTRAINTS;
+                    return false;
+                }
+            }
+            else{
+                nc_waypoints.push_back(query_robot_state);
+                std::cout << "This state is not colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
+            }
+        }
+
+        robot_state::RobotState prev_state = nc_waypoints[0];
+
+        std::vector<robot_trajectory::RobotTrajectory> computed_traj;
+        for(std::size_t i = 1; i < nc_waypoints.size(); ++i){
+            const robot_state::RobotState& next_state = nc_waypoints[i];
+
+            std::vector<double> prev_joint_states;
+            std::vector<double> next_joint_states;
+            prev_state.copyJointGroupPositions(joint_model_group, prev_joint_states);
+            next_state.copyJointGroupPositions(joint_model_group, next_joint_states);
+
+            const double min_diff = 3.0*3.14/180.0;
+            double diff = 0.0;
+            for(std::size_t j = 0; j < prev_joint_states.size(); ++j){
+                diff += std::abs(prev_joint_states[j] - next_joint_states[j]);
+            }
+            diff /= prev_joint_states.size();
+
+            std::cout << "[DIFF] : " << diff << std::endl;
+            if(diff < min_diff && i != (nc_waypoints.size()-1)){
+                continue;
+            }
+
+
+            planning_interface::MotionPlanRequest mp_req;
+            planning_interface::MotionPlanResponse mp_res;
+
+            mp_req.group_name = target_group;
+
+            robot_state::robotStateToRobotStateMsg(prev_state, mp_req.start_state);
+            mp_req.goal_constraints.push_back(kinematic_constraints::constructGoalConstraints(next_state, joint_model_group));
 
 
 
+            bool solved = context_->planning_pipeline_->generatePlan(ps, mp_req, mp_res);
+            if(solved){
+                prev_state = mp_res.trajectory_->getLastWayPoint();
+
+                for(std::size_t j = 0; j < mp_res.trajectory_->getWayPointCount(); ++j) {
+                    //traj.push_back(mp_res.trajectory_->getWayPointPtr(j));
+                }
+
+                computed_traj.push_back(*mp_res.trajectory_);
+            }
+        }
+
+        robot_trajectory::RobotTrajectory rt(context_->planning_scene_monitor_->getRobotModel(), req.group_name);
+        std::cout << rt.getWayPointCount() <<std::endl;
+
+        std::vector<double> prev_joint_states;
+        computed_traj[0].getFirstWayPoint().copyJointGroupPositions(joint_model_group, prev_joint_states);
+        std::vector<double> zero_velocities(prev_joint_states.size(), 0.0);
+        for(std::size_t i = 0; i < computed_traj.size(); ++i){
+            const robot_trajectory::RobotTrajectory& traj = computed_traj[i];
+            for(std::size_t j = 1; j < traj.getWayPointCount(); ++j){
+
+                std::vector<double> next_joint_states;
+                traj.getWayPoint(j).copyJointGroupPositions(joint_model_group, next_joint_states);
+
+                double diff = 0.0;
+                for(std::size_t j = 0; j < prev_joint_states.size(); ++j){
+                    diff += std::abs(prev_joint_states[j] - next_joint_states[j]);
+                }
+                diff /= prev_joint_states.size();
+
+
+                //double dt = diff /joint_speed;
+                double dt = traj.getWayPointDurationFromPrevious(j);
+
+                if(j == 0){
+                    //dt = 0.1;
+                }
+                rt.addSuffixWayPoint(traj.getWayPoint(j), dt);
+                rt.getLastWayPointPtr()->setJointGroupVelocities(joint_model_group, zero_velocities);
+
+
+                prev_joint_states = next_joint_states;
+            }
+        }
+
+        //trajectory_processing::IterativeParabolicTimeParameterization time_param;
+        //time_param.computeTimeStamps(rt, 0.1);
+        std::cout << rt.getWayPointCount() <<std::endl;
+
+        /*
         robot_trajectory::RobotTrajectory rt(context_->planning_scene_monitor_->getRobotModel(), req.group_name);
         for (std::size_t i = 0; i < traj.size(); ++i){
             rt.addSuffixWayPoint(traj[i], 0.0);
         }
 
-        trajectory_processing::IterativeParabolicTimeParameterization time_param;
-        time_param.computeTimeStamps(rt, 1.0);
+
+        */
 
         rt.getRobotTrajectoryMsg(res.solution);
+        res.solution.joint_trajectory.header.stamp = ros::Time::now()+ros::Duration(1.0);
+        std::cout <<res.solution <<std::endl;
 
 
         ROS_INFO("Computed Joint path with %u points",
