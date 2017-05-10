@@ -1,6 +1,7 @@
 set(MOVEIT_LIB_NAME moveit_ompl_interface)
 
 add_library(${MOVEIT_LIB_NAME}
+  src/QRRTstar.cpp
   src/ompl_interface.cpp
   src/planning_context_manager.cpp
   src/constraints_library.cpp
@@ -19,6 +20,8 @@ add_library(${MOVEIT_LIB_NAME}
   src/detail/constrained_valid_state_sampler.cpp
   src/detail/constrained_goal_sampler.cpp
 )
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION ${${PROJECT_NAME}_VERSION})
 
 find_package(OpenMP)
