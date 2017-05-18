@@ -132,7 +132,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
                 }
             }
             query_robot_state.setJointGroupPositions(joint_model_group, query_joint_states);
-            if(ps->isStateColliding(query_robot_state)) {
+            if(ps->isStateColliding(query_robot_state, target_group, true)) {
                 std::cout << "This state is colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
 
                 float p_last = (float)(req.waypoints.points.size()-1 - last_waypoint_index)/(float)req.waypoints.points.size();
@@ -140,6 +140,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
                 if(i ==  req.waypoints.points.size() - 1 && p_last > 0.1)
                 {
                     std::cout << "!!!!!!!! this trajectory could not solved !!" << std::endl;
+                    //nc_waypoints.push_back(query_robot_state);
                     //res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GOAL_CONSTRAINTS;
                     //return false;
                 }
