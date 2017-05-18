@@ -118,6 +118,8 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
         nc_waypoints.push_back(start_state);
 
 
+        
+        std::size_t last_waypoint_index = 0;
 
         for(std::size_t i = 0; i < req.waypoints.points.size(); ++i){
             trajectory_msgs::JointTrajectoryPoint waypoint = req.waypoints.points[i];
@@ -132,15 +134,20 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
             query_robot_state.setJointGroupPositions(joint_model_group, query_joint_states);
             if(ps->isStateColliding(query_robot_state)) {
                 std::cout << "This state is colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
-                if(i ==  req.waypoints.points.size() - 1){
+
+                float p_last = (float)(req.waypoints.points.size()-1 - last_waypoint_index)/(float)req.waypoints.points.size();
+
+                if(i ==  req.waypoints.points.size() - 1 && p_last > 0.1)
+                {
                     std::cout << "!!!!!!!! this trajectory could not solved !!" << std::endl;
-                    res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GOAL_CONSTRAINTS;
-                    return false;
+                    //res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GOAL_CONSTRAINTS;
+                    //return false;
                 }
             }
             else{
                 nc_waypoints.push_back(query_robot_state);
-                std::cout << "This state is not colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
+                last_waypoint_index = i;
+                //std::cout << "This state is not colliding " << i << " / " << req.waypoints.points.size()  << std::endl;
             }
         }
 
@@ -259,97 +266,6 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
     else {
         res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GROUP_NAME;
     }
-
-    /*
-    if (const robot_model::JointModelGroup* jmg = start_state.getJointModelGroup(req.group_name))
-    {
-        std::string link_name = req.link_name;
-        if (link_name.empty() && !jmg->getLinkModelNames().empty())
-            link_name = jmg->getLinkModelNames().back();
-
-        bool ok = true;
-        EigenSTL::vector_Affine3d waypoints(req.waypoints.size());
-        const std::string& default_frame = context_->planning_scene_monitor_->getRobotModel()->getModelFrame();
-        bool no_transform = req.header.frame_id.empty() ||
-                            robot_state::Transforms::sameFrame(req.header.frame_id, default_frame) ||
-                            robot_state::Transforms::sameFrame(req.header.frame_id, link_name);
-
-        for (std::size_t i = 0; i < req.waypoints.size(); ++i)
-        {
-            if (no_transform)
-                tf::poseMsgToEigen(req.waypoints[i], waypoints[i]);
-            else
-            {
-                geometry_msgs::PoseStamped p;
-                p.header = req.header;
-                p.pose = req.waypoints[i];
-                if (performTransform(p, default_frame))
-                    tf::poseMsgToEigen(p.pose, waypoints[i]);
-                else
-                {
-                    ROS_ERROR("Error encountered transforming waypoints to frame '%s'", default_frame.c_str());
-                    ok = false;
-                    break;
-                }
-            }
-        }
-
-        if (ok)
-        {
-            if (req.max_step < std::numeric_limits<double>::epsilon())
-            {
-                ROS_ERROR("Maximum step to take between consecutive configrations along Joint path was not specified (this "
-                          "value needs to be > 0)");
-                res.error_code.val = moveit_msgs::MoveItErrorCodes::FAILURE;
-            }
-            else
-            {
-                if (waypoints.size() > 0)
-                {
-                    robot_state::GroupStateValidityCallbackFn constraint_fn;
-                    std::unique_ptr<planning_scene_monitor::LockedPlanningSceneRO> ls;
-                    std::unique_ptr<kinematic_constraints::KinematicConstraintSet> kset;
-                    bool global_frame = !robot_state::Transforms::sameFrame(link_name, req.header.frame_id);
-                    ROS_INFO("Attempting to follow %u waypoints for link '%s' using a step of %lf m and jump threshold %lf (in "
-                             "%s reference frame)",
-                             (unsigned int)waypoints.size(), link_name.c_str(), req.max_step, req.jump_threshold,
-                             global_frame ? "global" : "link");
-                    std::vector<robot_state::RobotStatePtr> traj;
-                    res.fraction =
-                        start_state.computeJointPath(jmg, traj, start_state.getLinkModel(link_name), waypoints, global_frame,
-                                                     req.max_step, req.jump_threshold, constraint_fn);
-                    robot_state::robotStateToRobotStateMsg(start_state, res.start_state);
-
-                    robot_trajectory::RobotTrajectory rt(context_->planning_scene_monitor_->getRobotModel(), req.group_name);
-                    for (std::size_t i = 0; i < traj.size(); ++i)
-                        rt.addSuffixWayPoint(traj[i], 0.0);
-
-                    // time trajectory
-                    // \todo optionally compute timing to move the eef with constant speed
-                    trajectory_processing::IterativeParabolicTimeParameterization time_param;
-                    time_param.computeTimeStamps(rt, 1.0);
-
-                    rt.getRobotTrajectoryMsg(res.solution);
-                    ROS_INFO("Computed Joint path with %u points (followed %lf%% of requested trajectory)",
-                             (unsigned int)traj.size(), res.fraction * 100.0);
-                    if (display_computed_paths_ && rt.getWayPointCount() > 0)
-                    {
-                        moveit_msgs::DisplayTrajectory disp;
-                        disp.model_id = context_->planning_scene_monitor_->getRobotModel()->getName();
-                        disp.trajectory.resize(1, res.solution);
-                        robot_state::robotStateToRobotStateMsg(rt.getFirstWayPoint(), disp.trajectory_start);
-                        display_path_.publish(disp);
-                    }
-                }
-                res.error_code.val = moveit_msgs::MoveItErrorCodes::SUCCESS;
-            }
-        }
-        else
-            res.error_code.val = moveit_msgs::MoveItErrorCodes::FRAME_TRANSFORM_FAILURE;
-    }
-    else
-        res.error_code.val = moveit_msgs::MoveItErrorCodes::INVALID_GROUP_NAME;
-    */
 
     return true;
 }
