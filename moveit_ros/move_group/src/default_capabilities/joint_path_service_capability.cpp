@@ -169,7 +169,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
             }
             diff /= prev_joint_states.size();
 
-            std::cout << "[DIFF] : " << diff << std::endl;
+            //std::cout << "[DIFF] : " << diff << std::endl;
             if(diff < min_diff && i != (nc_waypoints.size()-1)){
                 continue;
             }
@@ -198,7 +198,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
         }
 
         robot_trajectory::RobotTrajectory rt(context_->planning_scene_monitor_->getRobotModel(), req.group_name);
-        std::cout << rt.getWayPointCount() <<std::endl;
+        //std::cout << rt.getWayPointCount() <<std::endl;
 
         std::vector<double> prev_joint_states;
         computed_traj[0].getFirstWayPoint().copyJointGroupPositions(joint_model_group, prev_joint_states);
@@ -233,7 +233,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
 
         //trajectory_processing::IterativeParabolicTimeParameterization time_param;
         //time_param.computeTimeStamps(rt, 0.1);
-        std::cout << rt.getWayPointCount() <<std::endl;
+       // std::cout << rt.getWayPointCount() <<std::endl;
 
         /*
         robot_trajectory::RobotTrajectory rt(context_->planning_scene_monitor_->getRobotModel(), req.group_name);
@@ -246,7 +246,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
 
         rt.getRobotTrajectoryMsg(res.solution);
         res.solution.joint_trajectory.header.stamp = ros::Time::now()+ros::Duration(1.0);
-        std::cout <<res.solution <<std::endl;
+        //std::cout <<res.solution <<std::endl;
 
 
         ROS_INFO("Computed Joint path with %u points",

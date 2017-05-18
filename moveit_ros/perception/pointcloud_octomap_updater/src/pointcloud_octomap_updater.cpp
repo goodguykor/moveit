@@ -50,6 +50,7 @@ PointCloudOctomapUpdater::PointCloudOctomapUpdater()
   , private_nh_("~")
   , scale_(1.0)
   , padding_(0.0)
+  , resolution_(0.04)
   , max_range_(std::numeric_limits<double>::infinity())
   , point_subsample_(1)
   , point_cloud_subscriber_(NULL)
@@ -74,6 +75,7 @@ bool PointCloudOctomapUpdater::setParams(XmlRpc::XmlRpcValue& params)
     readXmlParam(params, "padding_offset", &padding_);
     readXmlParam(params, "padding_scale", &scale_);
     readXmlParam(params, "point_subsample", &point_subsample_);
+    readXmlParam(params, "resolution", &resolution_);
     if (params.hasMember("filtered_cloud_topic"))
       filtered_cloud_topic_ = static_cast<const std::string&>(params["filtered_cloud_topic"]);
   }
@@ -91,10 +93,53 @@ bool PointCloudOctomapUpdater::initialize()
   tf_ = monitor_->getTFClient();
   shape_mask_.reset(new point_containment_filter::ShapeMask());
   shape_mask_->setTransformCallback(boost::bind(&PointCloudOctomapUpdater::getShapeTransform, this, _1, _2));
+
+  collision_object_subscriper_ = root_nh_.subscribe<moveit_msgs::CollisionObject>("collision_object", 1, &PointCloudOctomapUpdater::collisionObjectMsgCallback, this);
+  attached_collision_object_subscriper_ = root_nh_.subscribe<moveit_msgs::AttachedCollisionObject>("attached_collision_object", 1, &PointCloudOctomapUpdater::attachedCollisionObjectMsgCallback, this);
+
   if (!filtered_cloud_topic_.empty())
     filtered_cloud_publisher_ = private_nh_.advertise<sensor_msgs::PointCloud2>(filtered_cloud_topic_, 10, false);
   return true;
 }
+
+void PointCloudOctomapUpdater::attachedCollisionObjectMsgCallback(const moveit_msgs::AttachedCollisionObject::ConstPtr &obj_msg){
+    std::vector<moveit_msgs::CollisionObject> collision_objects_backup = collision_objects_;
+    collision_objects_.clear();
+    for(auto object : collision_objects_backup){
+        if(object.id != obj_msg->object.id){
+            collision_objects_.push_back(object);
+        }
+    }
+}
+
+void PointCloudOctomapUpdater::collisionObjectMsgCallback(const moveit_msgs::CollisionObject::ConstPtr &obj_msg){
+    if(obj_msg->operation == moveit_msgs::CollisionObject::ADD
+            || obj_msg->operation == moveit_msgs::CollisionObject::MOVE
+            || obj_msg->operation == moveit_msgs::CollisionObject::APPEND)
+    {
+        bool is_already_registered = false;
+        for(auto& object : collision_objects_){
+            if(object.id == obj_msg->id && obj_msg->primitives.size() != 0){
+                is_already_registered = true;
+                object = *obj_msg;
+            }
+        }
+        if(!is_already_registered && obj_msg->primitives.size() != 0){
+            collision_objects_.push_back(*obj_msg);
+        }
+    }
+    else if(obj_msg->operation == moveit_msgs::CollisionObject::REMOVE){
+        std::cout << "REMOVE OBJECT!!!!!!!!!!!!!!" << std::endl;
+        std::vector<moveit_msgs::CollisionObject> collision_objects_backup = collision_objects_;
+        collision_objects_.clear();
+        for(auto object : collision_objects_backup){
+            if(object.id != obj_msg->id){
+                collision_objects_.push_back(object);
+            }
+        }
+    }
+}
+
 
 void PointCloudOctomapUpdater::start()
 {
@@ -162,6 +207,74 @@ void PointCloudOctomapUpdater::updateMask(const sensor_msgs::PointCloud2& cloud,
                                           std::vector<int>& mask)
 {
 }
+
+
+void PointCloudOctomapUpdater::registerOccupancyKeySetForCollisionObjects(octomap::KeySet& cells){
+
+    for(auto object : collision_objects_){
+        for(std::size_t i = 0; i < object.primitives.size(); ++i){
+            geometry_msgs::PoseStamped object_pose;
+            object_pose.header.stamp = ros::Time::now();
+            object_pose.header.frame_id = "base_footprint";
+            object_pose.pose = object.primitive_poses[i];
+
+            tf::Stamped<tf::Pose> object_global_pose_tf;
+            tf::Stamped<tf::Pose>  object_pose_tf;
+            tf::poseStampedMsgToTF(object_pose, object_pose_tf);
+
+            try{
+                tf_->transformPose("map", ros::Time(0), object_pose_tf, object_pose.header.frame_id, object_global_pose_tf);
+            } catch (tf::TransformException& ex){
+                ROS_ERROR("TRANSFORM EXCEPTION: %s", ex.what());
+                return;
+            }
+            geometry_msgs::PoseStamped object_global_pose;
+            tf::poseStampedTFToMsg(object_global_pose_tf, object_global_pose);
+
+            Eigen::Vector3d center;
+            center << object_global_pose.pose.position.x, object_global_pose.pose.position.y, object_global_pose.pose.position.z;
+            shape_msgs::SolidPrimitive solid = object.primitives[i];
+            if(solid.type == shape_msgs::SolidPrimitive::BOX){
+                double dim_x = solid.dimensions[shape_msgs::SolidPrimitive::BOX_X];
+                double dim_y = solid.dimensions[shape_msgs::SolidPrimitive::BOX_Y];
+                double dim_z = solid.dimensions[shape_msgs::SolidPrimitive::BOX_Z];
+
+                for(double x = -dim_x/2.0-resolution_; x <= dim_x/2.0+resolution_; x = x+resolution_){
+                    for(double y = -dim_y/2.0-resolution_; y <= dim_y/2.0+resolution_; y = y+resolution_){
+                        for(double z = -dim_z/2.0-resolution_; z <= dim_z/2.0+resolution_; z = z+resolution_){
+                            cells.insert(tree_->coordToKey(x+center(0), y+center(1), z+center(2)));
+                        }
+                    }
+                }
+            }
+            else if(solid.type == shape_msgs::SolidPrimitive::CYLINDER){
+                double dim_x = solid.dimensions[shape_msgs::SolidPrimitive::CYLINDER_RADIUS]*2.0;
+                double dim_z = solid.dimensions[shape_msgs::SolidPrimitive::CYLINDER_HEIGHT];
+
+                for(double x = -dim_x/2.0-resolution_; x <= dim_x/2.0+resolution_; x = x+resolution_){
+                    for(double y = -dim_x/2.0-resolution_; y <= dim_x/2.0+resolution_; y = y+resolution_){
+                        for(double z = -dim_z/2.0-resolution_; z <= dim_z/2.0+resolution_; z = z+resolution_){
+                            cells.insert(tree_->coordToKey(x+center(0), y+center(1), z+center(2)));
+                        }
+                    }
+                }
+            }
+            else if(solid.type == shape_msgs::SolidPrimitive::SPHERE){
+                double dim_x = solid.dimensions[shape_msgs::SolidPrimitive::SPHERE_RADIUS]*2.0;
+                for(double x = -dim_x/2.0-resolution_; x <= dim_x/2.0+resolution_; x = x+resolution_){
+                    for(double y = -dim_x/2.0-resolution_; y <= dim_x/2.0+resolution_; y = y+resolution_){
+                        for(double z = -dim_x/2.0-resolution_; z <= dim_x/2.0+resolution_; z = z+resolution_){
+                            cells.insert(tree_->coordToKey(x+center(0), y+center(1), z+center(2)));
+                        }   
+                    }
+                }
+            }
+
+        }
+
+    }
+}
+
 
 void PointCloudOctomapUpdater::cloudMsgCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg)
 {
@@ -240,6 +353,8 @@ void PointCloudOctomapUpdater::cloudMsgCallback(const sensor_msgs::PointCloud2::
   {
     /* do ray tracing to find which cells this point cloud indicates should be free, and which it indicates
      * should be occupied */
+    registerOccupancyKeySetForCollisionObjects(model_cells);
+
     for (unsigned int row = 0; row < cloud_msg->height; row += point_subsample_)
     {
       unsigned int row_c = row * cloud_msg->width;

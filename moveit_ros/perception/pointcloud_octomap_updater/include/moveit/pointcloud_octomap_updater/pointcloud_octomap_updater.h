@@ -45,6 +45,11 @@
 #include <moveit/occupancy_map_monitor/occupancy_map_updater.h>
 #include <moveit/point_containment_filter/shape_mask.h>
 
+
+/* Receive Additional Object info - Deok-Hwa Kim*/
+#include <moveit_msgs/CollisionObject.h>
+#include <moveit_msgs/AttachedCollisionObject.h>
+
 #include <memory>
 
 namespace occupancy_map_monitor
@@ -72,18 +77,30 @@ private:
   void cloudMsgCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg);
   void stopHelper();
 
+  /* Receive Additional Object info - Deok-Hwa Kim*/
+  void collisionObjectMsgCallback(const moveit_msgs::CollisionObject::ConstPtr &obj_msg);
+  void attachedCollisionObjectMsgCallback(const moveit_msgs::AttachedCollisionObject::ConstPtr &obj_msg);
+  void registerOccupancyKeySetForCollisionObjects(octomap::KeySet& cells);
+
+
   ros::NodeHandle root_nh_;
   ros::NodeHandle private_nh_;
   boost::shared_ptr<tf::Transformer> tf_;
 
   /* params */
   std::string point_cloud_topic_;
+  double resolution_;  // By Deok-Hwa Kim
   double scale_;
   double padding_;
   double max_range_;
   unsigned int point_subsample_;
   std::string filtered_cloud_topic_;
   ros::Publisher filtered_cloud_publisher_;
+
+  /* Receive Additional Object info - Deok-Hwa Kim*/
+  ros::Subscriber collision_object_subscriper_;
+  ros::Subscriber attached_collision_object_subscriper_;
+
 
   message_filters::Subscriber<sensor_msgs::PointCloud2>* point_cloud_subscriber_;
   tf::MessageFilter<sensor_msgs::PointCloud2>* point_cloud_filter_;
@@ -94,6 +111,11 @@ private:
 
   std::unique_ptr<point_containment_filter::ShapeMask> shape_mask_;
   std::vector<int> mask_;
+
+  /* Receive Additional Object info - Deok-Hwa Kim*/
+  std::vector<moveit_msgs::CollisionObject> collision_objects_;
+
+
 };
 }
 
