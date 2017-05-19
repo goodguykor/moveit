@@ -180,8 +180,8 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
             planning_interface::MotionPlanResponse mp_res;
 
             mp_req.group_name = target_group;
-            //mp_req.planner_id = "RRTConnectkConfigDefault";
-            mp_req.planner_id = "QRRTstarConfigDefault";
+            mp_req.planner_id = "RRTConnectkConfigDefault";
+            //mp_req.planner_id = "QRRTstarConfigDefault";
 
 
             robot_state::robotStateToRobotStateMsg(prev_state, mp_req.start_state);

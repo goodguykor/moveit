@@ -78,7 +78,7 @@ void ompl::geometric::QRRTstar::clear()
   goalMotions_.clear();
 
   for(auto& m : vertices_) {
-    deleteMotion(m);
+    //deleteMotion(m);
   }
   vertices_.clear();
 
@@ -514,7 +514,10 @@ void ompl::geometric::QRRTstar::reduce_unreachable()
 void ompl::geometric::QRRTstar::removeFromParent(Motion *m)
 {
   if(m->parent) {
-    m->parent->children.erase(m);
+    auto motion_loc = m->parent->children.find(m);
+    if(motion_loc != m->parent->children.end()){
+        m->parent->children.erase(m);
+    }
   }
 }
 
@@ -566,6 +569,8 @@ void ompl::geometric::QRRTstar::getPlannerData(base::PlannerData &data) const
 
 void ompl::geometric::QRRTstar::deleteMotion(Motion *m)
 {
+  if(m == NULL) return;
+
   // neighbor 정리
   for(const auto& x : out_neighbor_[m]) {
     in_neighbor_[x.first].erase(m);

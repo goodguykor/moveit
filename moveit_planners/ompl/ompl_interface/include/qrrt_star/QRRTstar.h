@@ -123,7 +123,11 @@ namespace ompl
 
         ~Motion()
         {
-          si_->freeState(state);
+          /*
+          if(si_ != NULL && state != NULL) {
+              si_->freeState(state);
+          }
+          */
         }
 
         const base::SpaceInformationPtr si_;
