@@ -207,6 +207,8 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
         std::vector<double> prev_joint_states;
         computed_traj[0].getFirstWayPoint().copyJointGroupPositions(joint_model_group, prev_joint_states);
         std::vector<double> zero_velocities(prev_joint_states.size(), 0.0);
+
+        rt.addSuffixWayPoint(start_state, 0.2);
         for(std::size_t i = 0; i < computed_traj.size(); ++i){
             const robot_trajectory::RobotTrajectory& traj = computed_traj[i];
             for(std::size_t j = 1; j < traj.getWayPointCount(); ++j){
@@ -228,7 +230,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
                     //dt = 0.1;
                 }
                 rt.addSuffixWayPoint(traj.getWayPoint(j), dt);
-                rt.getLastWayPointPtr()->setJointGroupVelocities(joint_model_group, zero_velocities);
+                //rt.getLastWayPointPtr()->setJointGroupVelocities(joint_model_group, zero_velocities);
 
 
                 prev_joint_states = next_joint_states;
