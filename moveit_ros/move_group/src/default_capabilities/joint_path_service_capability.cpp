@@ -154,6 +154,9 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
 
         robot_state::RobotState prev_state = nc_waypoints[0];
 
+
+        std::size_t max_try = 5;
+
         std::vector<robot_trajectory::RobotTrajectory> computed_traj;
         for(std::size_t i = 1; i < nc_waypoints.size(); ++i){
             const robot_state::RobotState& next_state = nc_waypoints[i];
@@ -189,14 +192,31 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
 
 
 
-            bool solved = context_->planning_pipeline_->generatePlan(ps, mp_req, mp_res);
-            if(solved){
-                prev_state = mp_res.trajectory_->getLastWayPoint();
+            bool good_solved = false;
+            double best_last_time = std::numeric_limits<double>::max();
+            std::size_t best_waypoints = std::numeric_limits<std::size_t>::max();
+            for(std::size_t j = 0; j < max_try; ++j){
+                planning_interface::MotionPlanResponse mp_res_candidate;
+                bool solved = context_->planning_pipeline_->generatePlan(ps, mp_req, mp_res_candidate);
+                if(solved && mp_res_candidate.trajectory_->getWayPointCount() != 0){
+                    double last_time = mp_res_candidate.trajectory_->getWayPointDurationFromPrevious(mp_res_candidate.trajectory_->getWayPointCount()-1);
 
-                for(std::size_t j = 0; j < mp_res.trajectory_->getWayPointCount(); ++j) {
-                    //traj.push_back(mp_res.trajectory_->getWayPointPtr(j));
+                    std::size_t waypoints_num = mp_res_candidate.trajectory_->getWayPointCount();
+
+                    if(best_waypoints > waypoints_num){
+                    //if(best_last_time > last_time){
+                        best_waypoints = waypoints_num;
+                        best_last_time = last_time;
+                        mp_res = mp_res_candidate;
+                        good_solved = true;
+                    }
                 }
 
+                std::cout << "[" << j << "] Try once more!! : " << best_last_time << ", " << best_waypoints << std::endl;
+            }
+
+            if(good_solved){
+                prev_state = mp_res.trajectory_->getLastWayPoint();
                 computed_traj.push_back(*mp_res.trajectory_);
             }
         }
@@ -209,28 +229,50 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
         std::vector<double> zero_velocities(prev_joint_states.size(), 0.0);
 
         rt.addSuffixWayPoint(start_state, 0.2);
+
+        const double joint_speed = 20.0/180.0*3.14;
         for(std::size_t i = 0; i < computed_traj.size(); ++i){
             const robot_trajectory::RobotTrajectory& traj = computed_traj[i];
             for(std::size_t j = 1; j < traj.getWayPointCount(); ++j){
 
                 std::vector<double> next_joint_states;
+                std::vector<double> next_joint_velocities;
                 traj.getWayPoint(j).copyJointGroupPositions(joint_model_group, next_joint_states);
+                traj.getWayPoint(j).copyJointGroupVelocities(joint_model_group, next_joint_velocities);
 
                 double diff = 0.0;
+                double max_diff = 0.0;
                 for(std::size_t j = 0; j < prev_joint_states.size(); ++j){
                     diff += std::abs(prev_joint_states[j] - next_joint_states[j]);
+                    float joint_diff = std::abs(prev_joint_states[j] - next_joint_states[j]);
+                    if(joint_diff > max_diff){
+                        max_diff = joint_diff;
+                    }
                 }
                 diff /= prev_joint_states.size();
 
 
-                //double dt = diff /joint_speed;
-                double dt = traj.getWayPointDurationFromPrevious(j);
+                double dt = max_diff /joint_speed;
+                if(dt < 0.01)  continue;
+                std::cout <<"dt:  " << dt << ", max_diff: " << max_diff * 180.0/3.14 << std::endl;
+                //double dt = traj.getWayPointDurationFromPrevious(j);
 
                 if(j == 0){
                     //dt = 0.1;
                 }
+
+
+                for(std::size_t j = 0; j < prev_joint_states.size(); ++j){
+                    float joint_diff = next_joint_states[j] - prev_joint_states[j];
+                    float velocity = joint_diff/dt;
+                    //std::cout << next_joint_velocities[j] << std::endl;
+                    next_joint_velocities[j] = velocity*1.2;
+                }
+
+
+
                 rt.addSuffixWayPoint(traj.getWayPoint(j), dt);
-                //rt.getLastWayPointPtr()->setJointGroupVelocities(joint_model_group, zero_velocities);
+                rt.getLastWayPointPtr()->setJointGroupVelocities(joint_model_group, next_joint_velocities);
 
 
                 prev_joint_states = next_joint_states;
