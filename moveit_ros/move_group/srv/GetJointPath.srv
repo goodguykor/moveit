@@ -10,6 +10,8 @@ string group_name
 # A sequence of waypoints to be followed by the group joints 
 trajectory_msgs/JointTrajectory waypoints
 
+bool is_compute
+
 ---
 
 # The state at which the computed path starts
