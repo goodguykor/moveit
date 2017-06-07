@@ -167,7 +167,7 @@ bool move_group::MoveGroupJointPathService::computeService(moveit_ros_move_group
             }
 
             trajectory_processing::IterativeParabolicTimeParameterization time_param;
-            time_param.computeTimeStamps(rt, 0.5);
+            time_param.computeTimeStamps(rt, 1.0);
             std::cout << rt.getWayPointCount() <<std::endl;
 
             rt.getRobotTrajectoryMsg(res.solution);
